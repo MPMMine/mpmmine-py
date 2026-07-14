@@ -1,0 +1,35 @@
+[project]
+name = "mpmmine"
+version = "0.0.1.20260714"
+authors = [
+    { name = "Tomasz P. Pawlak", email = "tpawlak@cs.put.poznan.pl" },
+    { name = "Rafał Stachowiak", email = "rstachowiak@cs.put.poznan.pl" }
+]
+description = "A Python package for accessing the MPMMine dataset"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed"
+]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/MPMMine/mpmmine-py"
+Repository = "https://github.com/MPMMine/mpmmine-py.git"
+Issues = "https://github.com/MPMMine/mpmmine-py/issues"
+Dataset = "https://github.com/MPMMine/MPMMine"
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
