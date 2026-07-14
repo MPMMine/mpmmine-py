@@ -1,6 +1,6 @@
 [project]
 name = "mpmmine"
-version = "0.0.1.20260714"
+version = "0.0.3.20260714"
 authors = [
     { name = "Tomasz P. Pawlak", email = "tpawlak@cs.put.poznan.pl" },
     { name = "Rafał Stachowiak", email = "rstachowiak@cs.put.poznan.pl" }
@@ -29,6 +29,9 @@ Homepage = "https://github.com/MPMMine/mpmmine-py"
 Repository = "https://github.com/MPMMine/mpmmine-py.git"
 Issues = "https://github.com/MPMMine/mpmmine-py/issues"
 Dataset = "https://github.com/MPMMine/MPMMine"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mpmmine"]
 
 [build-system]
 requires = ["hatchling >= 1.26"]
