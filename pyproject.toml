@@ -24,6 +24,11 @@ classifiers = [
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/MPMMine/mpmmine-py"
 Repository = "https://github.com/MPMMine/mpmmine-py.git"
