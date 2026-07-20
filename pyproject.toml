@@ -1,13 +1,13 @@
 [project]
 name = "mpmmine"
-version = "0.0.3.20260714"
+version = "0.1.0.20260720"
 authors = [
     { name = "Tomasz P. Pawlak", email = "tpawlak@cs.put.poznan.pl" },
     { name = "Rafał Stachowiak", email = "rstachowiak@cs.put.poznan.pl" }
 ]
 description = "A Python package for accessing the MPMMine dataset"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -23,8 +23,10 @@ classifiers = [
 ]
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
+dependencies = []
 
 [project.optional-dependencies]
+sevenzip = ["py7zr"]
 test = [
     "pytest>=8.0.0",
 ]

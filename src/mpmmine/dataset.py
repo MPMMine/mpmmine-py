@@ -2,31 +2,60 @@ import json
 import re
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import Optional
 
-from mpmmine.backend import FileBackend
+from mpmmine.backend import Backend
+from mpmmine.file_backend import FileBackend
+from mpmmine.seven_zip_backend import SevenZipBackend
+from mpmmine.sqlite_backend import SQLiteBackend
+from mpmmine.zip_backend import ZipBackend
 
 
 class MPMMine:
-    backend_: FileBackend
-    id_regex_ = re.compile(
+    """
+    The main class for MPMMine dataset supporting utility.
+    """
+    _backend: Backend
+    _id_regex = re.compile(
         r"^(MPMMine-)?(?P<problem>P\d{3})(?P<model>M\d{3})?(?P<instance>I\d{3})?(?P<description>D\d{3})?((?P<solution>S\d{5})?|(?P<non_solution>N\d{5})?)$")
-    problem_id_regex_ = re.compile(r"^P\d{3}$")
-    model_id_regex_ = re.compile(r"^M\d{3}$")
-    description_id_regex_ = re.compile(r"^D\d{3}$")
-    instance_id_regex_ = re.compile(r"^I\d{3}$")
-    solution_id_regex_ = re.compile(r"^S\d{5}$")
-    non_solution_id_regex_ = re.compile(r"^N\d{5}$")
+    _problem_id_regex = re.compile(r"^P\d{3}$")
+    _model_id_regex = re.compile(r"^M\d{3}$")
+    _description_id_regex = re.compile(r"^D\d{3}$")
+    _instance_id_regex = re.compile(r"^I\d{3}$")
+    _solution_id_regex = re.compile(r"^S\d{5}$")
+    _non_solution_id_regex = re.compile(r"^N\d{5}$")
 
-    def __init__(self, backend: FileBackend):
+    def __init__(self, path_or_backend: Path | Backend):
         """
-        Initializes MPMMine
-        :param backend: backend to use, e.g., file system or archive
+        Initializes MPMMine.
+        :param path_or_backend: path to the MPMMine dataset or an initialized backend.
         """
-        self.backend_ = backend
+        if isinstance(path_or_backend, Backend):
+            self._backend = path_or_backend
+        else:
+            self._backend = self._detect_backend(path_or_backend)
+
+    def _detect_backend(self, path: Path) -> Backend:
+        if SQLiteBackend.matches(path):
+            return SQLiteBackend(path)
+        if ZipBackend.matches(path):
+            return ZipBackend(path)
+        if SevenZipBackend.matches(path):
+            return SevenZipBackend(path)
+        if FileBackend.matches(path):
+            return FileBackend(path)
+        raise ValueError(f"Cannot detect backend for path {path}")
 
     def __getitem__(self, id: str) -> Problem | Model | Instance | Description | Solution:
-        id_parts = self.id_regex_.fullmatch(id)
+        """
+        Gets an artifact from MPMMine dataset by its full id.
+        :param id: Full id of the artifact.
+        :return: The artifact, e.g., `Problem`, `Model`, `Instance`, `Description`, `Solution`, or `Solution`.
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
+        """
+        id_parts = self._id_regex.fullmatch(id)
         if id_parts is None:
             raise ValueError(f"Id {id} is invalid")
 
@@ -59,11 +88,12 @@ class MPMMine:
     def problems(self) -> list[Problem]:
         """
         The list of available problems.
-        :return:
+        This property is lazy-initialized.
+        :return: The list of problems.
         """
         out = [
             self.get_problem_(path.name.rsplit()[0], path)
-            for path in self.backend_.sub("problems").glob("P*")
+            for path in self._backend.sub("problems").glob("P*")
         ]
         out.sort(key=lambda p: p.id)
         return out
@@ -73,24 +103,23 @@ class MPMMine:
         Gets a problem by problem-id.
         :param id: Problem id in short form, e.g., P001.
         :return: Problem
-        :raises ValueError: if id is invalid or problem does not exist
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
         return self.get_problem_(id)
 
-    def get_problem_(self, id: str, path_: FileBackend | None = None) -> Problem:
-        if MPMMine.problem_id_regex_.fullmatch(id) is None:
+    def get_problem_(self, id: str, path_: Backend | None = None) -> Problem:
+        if MPMMine._problem_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
 
         try:
             if path_ is not None:
                 path = path_
             else:
-                path = next(self.backend_.sub("problems").glob(f"{id}*"))
+                path = next(self._backend.sub("problems").glob(f"{id}*"))
 
-            with path.open("manifest.json") as f:
-                raw = json.load(f)
-                # noinspection PyTypeChecker
-                return Problem(**raw, full_id=f"MPMMine-{raw['id']}", backend_=path)
+            raw = json.loads(path.read("manifest.json"))
+            return Problem(**raw, full_id=f"MPMMine-{raw['id']}", backend_=path)
         except (OSError, StopIteration) as err:
             raise FileNotFoundError(f"Problem {id} does not exist") from err
 
@@ -105,7 +134,7 @@ class Problem:
     references: list[dict[str, str]]
     links: dict[str, str]
     full_id: str
-    backend_: FileBackend
+    backend_: Backend
 
     @cached_property
     def models(self) -> list[Model]:
@@ -128,11 +157,12 @@ class Problem:
     def get_model(self, id: str) -> Model:
         """
         Gets a model by model-id.
-        This function runs in O(1), contrary to the O(n) id-based lookup in the models property.
-        :param id:
-        :return:
+        This function runs in O(1), contrary to the O(n) id-based lookup in the `models` property.
+        :param id: Model id in short form, e.g., M001.
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
-        if MPMMine.model_id_regex_.fullmatch(id) is None:
+        if MPMMine._model_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Model(
@@ -149,17 +179,16 @@ class Problem:
 class Model:
     id: str
     full_id: str
-    backend_: FileBackend
+    backend_: Backend
     problem: Problem
 
     @cached_property
     def mzn(self) -> str:
         """
-        The MiniZinc code for this model
+        The MiniZinc code for this model.
         This property is lazy-initialized.
         """
-        with self.backend_.open("model.mzn") as f:
-            return f.read()
+        return self.backend_.read("model.mzn")
 
     @cached_property
     def instances(self) -> list[Instance]:
@@ -180,7 +209,15 @@ class Model:
         return out
 
     def get_instance(self, id: str) -> Instance:
-        if MPMMine.instance_id_regex_.fullmatch(id) is None:
+        """
+        Gets a model instance by instance-id.
+        This function runs in O(1), contrary to the O(n) id-based lookup in the `instances` property.
+        :param id: Instance id in short form, e.g., I001.
+        :return: Instance
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
+        """
+        if MPMMine._instance_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Instance(
@@ -213,11 +250,13 @@ class Model:
     def get_description(self, id: str) -> Description:
         """
         Gets a description by description-id.
-        This function runs in O(1), contrary to the O(n) id-based lookup in the descriptions property.
-        :param id:
-        :return:
+        This function runs in O(1), contrary to the O(n) id-based lookup in the `descriptions` property.
+        :param id: Description id in short form, e.g., D001.
+        :return: Description
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
-        if MPMMine.description_id_regex_.fullmatch(id) is None:
+        if MPMMine._description_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Description(
@@ -234,17 +273,16 @@ class Model:
 class Instance:
     id: str
     full_id: str
-    backend_: FileBackend
+    backend_: Backend
     model: Model
 
     @cached_property
     def dzn(self) -> str:
         """
-        The instance DZN file contents
+        The instance DZN file contents.
         This property is lazy-initialized.
         """
-        with self.backend_.open("instance.dzn") as f:
-            return f.read()
+        return self.backend_.read("instance.dzn")
 
     @property
     def solutions(self) -> list[Solution]:
@@ -272,11 +310,13 @@ class Instance:
     def get_solution(self, id: str) -> Solution:
         """
         Gets a solution by solution-id.
-        This function runs in O(1), contrary to the O(n) id-based lookup in the solutions property.
-        :param id:
-        :return:
+        This function runs in O(1), contrary to the O(n) id-based lookup in the `solutions` property.
+        :param id: Solution id in short form, e.g., S00001.
+        :return: Solution
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
-        if MPMMine.solution_id_regex_.fullmatch(id) is None:
+        if MPMMine._solution_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Solution(
@@ -315,10 +355,12 @@ class Instance:
         """
         Gets a non-solution by non-solution-id.
         This function runs in O(1), contrary to the O(n) id-based lookup in the non-solutions property.
-        :param id:
-        :return:
+        :param id: Non-solution id in short form, e.g., N00001.
+        :return: Non-solution
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
-        if MPMMine.non_solution_id_regex_.fullmatch(id) is None:
+        if MPMMine._non_solution_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Solution(
@@ -352,12 +394,14 @@ class Instance:
 
     def get_description(self, id: str) -> Description:
         """
-        Gets by description-id a description of model with instance parameter values set .
-        This function runs in O(1), contrary to the O(n) id-based lookup in the descriptions property.
-        :param id:
-        :return:
+        Gets by description-id a description of model with instance parameter values set.
+        This function runs in O(1), contrary to the O(n) id-based lookup in the `descriptions` property.
+        :param id: Description id in short form, e.g., D001.
+        :return: Description
+        :raises ValueError: if id is invalid
+        :raises FileNotFoundError: if id does not exist
         """
-        if MPMMine.description_id_regex_.fullmatch(id) is None:
+        if MPMMine._description_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
         try:
             return Description(
@@ -375,7 +419,7 @@ class Instance:
 class Description:
     id: str
     full_id: str
-    backend_: FileBackend
+    backend_: Backend
     model: Optional[Model] = None
     instance: Optional[Instance] = None
 
@@ -385,24 +429,22 @@ class Description:
         The description Markdown contents.
         This property is lazy-initialized.
         """
-        with self.backend_.open() as f:
-            return f.read()
+        return self.backend_.read()
 
 
 @dataclass(frozen=True)
 class Solution:
     id: str
     full_id: str
-    backend_: FileBackend
+    backend_: Backend
     cls: bool
     instance: Instance
 
     @property
     def dzn(self) -> str:
         """
-        The solution/non-solution DZN file contents
+        The solution/non-solution DZN file contents.
         Caution! Repetitive access to this property may be slow, as it reads the underlying file on each access.
         External caching is recommended for repetitive access.
         """
-        with self.backend_.open() as f:
-            return f.read()
+        return self.backend_.read()

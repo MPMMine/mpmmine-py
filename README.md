@@ -1,8 +1,8 @@
 ![image](https://github.com/MPMMine/MPMMine/raw/main/docs/assets/banner.png)
 
-# mpmmine-py: A Python package for accessing the MPMMine dataset
+# mpmmine: A Python package for accessing the MPMMine dataset
 
-The mpmmine-py library provides a Python API for the [MPMMine](https://github.com/MPMMine/MPMMine) benchmark dataset.
+The mpmmine library provides a Python API for the [MPMMine](https://github.com/MPMMine/MPMMine) benchmark dataset.
 By leveraging native Python structures, it simplifies script development and facilitates seamless integration of the
 dataset into larger Python projects.
 MPMMine is a standardized dataset of benchmark problems for Mathematical
@@ -13,17 +13,24 @@ Programming model mining problems. For the details on the dataset, see the corre
 
 ### Installation
 
+To use MPMMine, you need two components: `mpmmine` package from `PyPI` and the actual
+[dataset](https://github.com/MPMMine/MPMMine). To install `mpmmine` just run standard package installation, e.g., for
+`pip`:
 ```shell
 pip install mpmmine
 ```
 
+Download the dataset from the [releases section](https://github.com/MPMMine/MPMMine/releases) of the official
+repository. We recommend using the SQLite-backed version, as it offers lower latency than direct file-system access
+while providing a highly-compressed representation.
+
 ### Usage
 
 ```python
-from mpmmine import MPMMine
+from mpmmine.dataset import MPMMine
 from pathlib import Path
 
-mpmmine = MPMMine(Path("~/path/to/MPMMine").expanduser())
+mpmmine = MPMMine(Path("~/path/to/MPMMine.sqlite").expanduser())
 
 print("Available benchmarks and their statistics: ")
 for problem in mpmmine.problems:
@@ -58,4 +65,18 @@ for i, non_solution in enumerate(mpmmine["MPMMine-P016M001I001"].non_solutions):
     print(f"% {non_solution.full_id}:\n{non_solution.dzn}")
 ```
 
+### Development
 
+To build a package run:
+
+```shell
+python3 -m build
+```
+
+To publish the package in PyPI run:
+
+```shell
+python3 -m twine upload --skip-existing dist/*
+```
+
+Note that it requires an access token to the PyPI repository to be configured first.
