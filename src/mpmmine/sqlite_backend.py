@@ -7,12 +7,12 @@ import re
 import sqlite3
 import sys
 import zlib
+from _lzma import CHECK_NONE
 from _zstd import ZstdDict
 from pathlib import Path
 from typing import override, Optional, Generator, Callable, Literal
 
 import colorlog
-from py7zr import CHECK_NONE
 
 from mpmmine.backend import Backend
 
