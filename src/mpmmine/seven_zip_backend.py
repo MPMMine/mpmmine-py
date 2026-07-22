@@ -9,7 +9,7 @@ from py7zr import Py7zIO, WriterFactory, SevenZipFile, py7zr
 from mpmmine.backend import Backend
 
 
-class MemoryIO(Py7zIO):
+class _MemoryIO(Py7zIO):
     """In-memory IO stream for py7zr extraction."""
 
     def __init__(self):
@@ -37,15 +37,15 @@ class MemoryIO(Py7zIO):
         return self.buffer.getvalue()
 
 
-class MemoryFactory(WriterFactory):
+class _MemoryFactory(WriterFactory):
     """Factory creating MemoryIO instances for in-memory extraction."""
 
     def __init__(self):
-        self.files: dict[str, MemoryIO] = {}
+        self.files: dict[str, _MemoryIO] = {}
 
     @override
     def create(self, filename: str) -> Py7zIO:
-        io_obj = MemoryIO()
+        io_obj = _MemoryIO()
         self.files[filename] = io_obj
         return io_obj
 
@@ -59,7 +59,7 @@ class SevenZipBackend(Backend):
     def __init__(
             self,
             archive_path: Path,
-            inner_path: str = "",
+            _inner_path: str = "",
             _shared_archive: Optional[SevenZipFile] = None,
             _shared_entries: Optional[List[str]] = None
     ):
@@ -67,7 +67,7 @@ class SevenZipBackend(Backend):
             raise FileNotFoundError(f"Path {archive_path} does not exist.")
 
         self.archive_path = archive_path
-        self._inner_path = inner_path.strip("/")
+        self._inner_path = _inner_path.strip("/")
         name = self._inner_path.split("/")[-1] if self._inner_path else archive_path.name
         super().__init__(name)
 
@@ -103,14 +103,13 @@ class SevenZipBackend(Backend):
 
     @override
     def read(self, filename: Optional[str] = None) -> str:
-        """Reads file content to memory and returns it as a UTF-8 string."""
         target_path = self._get_full_path(filename)
 
         self._verify_path(target_path, exact_match_only=True)
 
         try:
             self._archive.reset()
-            factory = MemoryFactory()
+            factory = _MemoryFactory()
 
             # Extract target file specifically into the MemoryFactory instance
             self._archive.extract(targets=[target_path], factory=factory)
@@ -127,7 +126,7 @@ class SevenZipBackend(Backend):
         new_path = self._get_full_path(filename)
         return SevenZipBackend(
             self.archive_path,
-            inner_path=new_path,
+            _inner_path=new_path,
             _shared_archive=self._archive,
             _shared_entries=self._entries
         )
@@ -149,7 +148,7 @@ class SevenZipBackend(Backend):
             if fnmatch.fnmatch(name, search_pattern):
                 yield SevenZipBackend(
                     self.archive_path,
-                    inner_path=name,
+                    _inner_path=name,
                     _shared_archive=self._archive,
                     _shared_entries=self._entries
                 )

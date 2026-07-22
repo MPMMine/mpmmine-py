@@ -7,10 +7,11 @@ from mpmmine.backend import Backend
 
 class ZipBackend(Backend):
     def __init__(self, archive_path: Optional[Path] = None, inner_path: str = "", _path: Optional[zipfile.Path] = None):
+            _inner_path: str = "",
         if _path:
             self._root = _path
         elif archive_path:
-            self._root = zipfile.Path(zipfile.ZipFile(archive_path), at=inner_path)
+            self._root = zipfile.Path(zipfile.ZipFile(archive_path), at=_inner_path)
         else:
             raise ValueError("Either archive_path or _path must be provided.")
 
