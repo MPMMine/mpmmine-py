@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from dataclasses import dataclass
 from functools import cached_property
@@ -6,10 +7,6 @@ from pathlib import Path
 from typing import Optional
 
 from mpmmine.backend import Backend
-from mpmmine.file_backend import FileBackend
-from mpmmine.seven_zip_backend import SevenZipBackend
-from mpmmine.sqlite_backend import SQLiteBackend
-from mpmmine.zip_backend import ZipBackend
 
 
 class MPMMine:
@@ -37,14 +34,34 @@ class MPMMine:
             self._backend = self._detect_backend(path_or_backend)
 
     def _detect_backend(self, path: Path) -> Backend:
-        if SQLiteBackend.matches(path):
-            return SQLiteBackend(path)
-        if ZipBackend.matches(path):
-            return ZipBackend(path)
-        if SevenZipBackend.matches(path):
-            return SevenZipBackend(path)
-        if FileBackend.matches(path):
-            return FileBackend(path)
+        try:
+            from mpmmine.sqlite_backend import SQLiteBackend
+            if SQLiteBackend.matches(path):
+                return SQLiteBackend(path)
+        except ImportError as e:
+            logging.error("Cannot load SQLite backend.", exc_info=e)
+
+        try:
+            from mpmmine.zip_backend import ZipBackend
+            if ZipBackend.matches(path):
+                return ZipBackend(path)
+        except ImportError as e:
+            logging.error("Cannot load ZIP backend.", exc_info=e)
+
+        try:
+            from mpmmine.seven_zip_backend import SevenZipBackend
+            if SevenZipBackend.matches(path):
+                return SevenZipBackend(path)
+        except ImportError as e:
+            logging.error("Cannot load 7z backend. Install py7zr package for the use of 7z backend.", exc_info=e)
+
+        try:
+            from mpmmine.file_backend import FileBackend
+            if FileBackend.matches(path):
+                return FileBackend(path)
+        except ImportError as e:
+            logging.error("Cannot load file backend.", exc_info=e)
+
         raise ValueError(f"Cannot detect backend for path {path}")
 
     def __getitem__(self, id: str) -> Problem | Model | Instance | Description | Solution:
