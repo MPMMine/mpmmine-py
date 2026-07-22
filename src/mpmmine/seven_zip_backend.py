@@ -51,6 +51,27 @@ class _MemoryFactory(WriterFactory):
 
 
 class SevenZipBackend(Backend):
+    """
+    A backend that offers access to the MPMMine dataset held within a 7z archive.
+
+    Initially, it reads the archive index to extract and cache the list of files. This typically lasts 30-60 seconds
+    and causes constant memory overhead of a few gigabytes. Then, lookup, file structure traversals, decompression
+    and extraction are performed on the fly.
+
+    The implementation relies on the optional `py7zr` package, which is not installed by default with mpmmine-py.
+
+    The performance of this backend depends on the parameters of the 7z archive. It is recommended to use this backend
+    with non-solid (i.e., regular) archives. The use with a solid archive is discouraged, as free file access requires
+    decompressing the entire block containing a file. For large blocks of several gigabytes, typically employed by solid
+    archives, this imposes the overhead of the decompression of gigabytes of data in order to read just a few kilobytes
+    of a specific file. Even for small blocks of, e.g., 1MB, it still turns out to be inefficient.
+
+    The performance also relies on the compression algorithm and its parameters. In preliminary experiments, the LZMA2
+    algorithm offers the least decompression overhead.
+
+    Overall, this backend suffers from the largest latencies and memory overhead, offering in exchange the best
+    compression level and so the smallest dataset archive.
+    """
     archive_path: Path
     _inner_path: str
     _archive: SevenZipFile

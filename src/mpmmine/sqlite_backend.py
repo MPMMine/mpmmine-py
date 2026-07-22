@@ -18,6 +18,39 @@ from mpmmine.backend import Backend
 
 
 class SQLiteBackend(Backend):
+    """
+    A backend that offers access to the MPMMine dataset held within an SQLite database with optional compression of
+    file contents.
+
+    It offers O(log(n)) file access times, where n is the total number of files within the dataset. It is 5-10x faster
+    than the direct file system access using `FileBackend`, with a little memory overhead. The optional compression
+    involves either `zstd`, `zlib`, or `lzma` algorithms, where `zstd` is recommended due to the fastest decompression
+    and compression level better than offered by `zlib` and similar to `lzma`.
+
+    To build an SQLite database from a clone of MPMMine repository run
+    ```shell
+    python3 -m mpmmine.sqlite_backend -t -c zstd /path/to/MPMMine_dataset MPMMine-zstd.sqlite
+    ```
+    where `-t` stands for truncate (overwrite) of an existing database; without `-t` the contents will be appended;
+    `-c` enables compression, and the following keyword picks the algorithm out of `zstd`, `zlib`, or `lzma`.
+
+    For `zlib` and `lzma`, it compresses independently each file. This is equivalent to a non-solid (i.e., regular)
+    archive. For `zstd`, it applies a hybrid compression approach:
+    1. If a directory consists of at least 10 files with the total size of at least 2.5KB:
+        - Calculate the average file size S within the directory; cap S to the range of 512B to 16KB.
+        - Train a compression dictionary D of size S on the entire contents of the directory.
+        - Store D in a special file `.zstd-dict` within this directory in the database.
+        - Compress independently each file within the directory using D.
+        - The decompression of the file content requires reading first the dictionary. Contrary to a solid archive,
+        each file can be decompressed independently, i.e., without decompressing contents of other files in the same
+        directory, resulting in very little overhead. The loaded dictionaries are cached for fast access to several
+        files within the same directory.
+    2. Otherwise:
+        - Compress independently each file within the directory.
+    3. File and directory names, and parent-child relationships are not compressed.
+
+    """
+
     _conn: sqlite3.Connection = None
     _parent: Optional[int] = None
     _parent_path: Path
@@ -26,15 +59,22 @@ class SQLiteBackend(Backend):
     # see _create_schema() for schema
 
     def __init__(self,
-                 file: Path | sqlite3.Connection,
+                 db_file_or_connection: Path | sqlite3.Connection,
                  _parent: Optional[int] = None,
                  _parent_path: Path = Path(""),
                  _decompressor: Optional[Callable] = None
                  ) -> None:
-        if isinstance(file, sqlite3.Connection):
-            self._conn = file
+        """
+        Initializes new instance of SQLiteBackend.
+        :param db_file_or_connection: Either a path to the database file, or an existing SQLite3 connection.
+        :param _parent: Primary key of the parent directory within the archive.
+        :param _parent_path: Path to the parent directory within the archive.
+        :param _decompressor: Decompressor for file contents.
+        """
+        if isinstance(db_file_or_connection, sqlite3.Connection):
+            self._conn = db_file_or_connection
         else:
-            self._conn = SQLiteBackend._connect(file)
+            self._conn = SQLiteBackend._connect(db_file_or_connection)
 
         super().__init__(_parent_path.name)
         self._parent = _parent
