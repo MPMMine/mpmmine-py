@@ -145,7 +145,7 @@ class SQLiteBackend(Backend):
                       CREATE TABLE IF NOT EXISTS files
                       (
                           id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                          parent  INTEGER REFERENCES files (id) ON DELETE SET NULL ON UPDATE CASCADE,
+                          parent INTEGER REFERENCES files (id) ON DELETE CASCADE ON UPDATE CASCADE,
                           name    TEXT NOT NULL,
                           content BLOB
                       ) STRICT
