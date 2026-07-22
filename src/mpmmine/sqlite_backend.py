@@ -238,6 +238,7 @@ class SQLiteBackend(Backend):
 
                 files_to_process = sorted(f for f in filenames if SQLiteBackend._valid_files.fullmatch(f))
                 zstd_dict = None
+                actual_compressor = compressor
                 if compress == "zstd":
                     train_data = [(dirpath / file).read_bytes() for file in files_to_process]
                     train_size = sum(len(d) for d in train_data)
@@ -253,8 +254,6 @@ class SQLiteBackend(Backend):
                             override_content=zstd_dict.dict_content
                         )
                         actual_compressor = lambda x: compression.zstd.compress(x, level=14, zstd_dict=zstd_dict)
-                    else:
-                        actual_compressor = compressor
 
                 for file in files_to_process:
                     path = dirpath / file
