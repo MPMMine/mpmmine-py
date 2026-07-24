@@ -23,7 +23,7 @@ classifiers = [
 ]
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*", "ACKNOWLEDGMENTS.md"]
-dependencies = []
+dependencies = ["colorlog"]
 
 [project.optional-dependencies]
 sevenzip = ["py7zr"]
