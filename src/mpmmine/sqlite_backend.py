@@ -1,6 +1,5 @@
 import argparse
 import compression
-import functools
 import logging
 import lzma
 import re
@@ -35,19 +34,9 @@ class SQLiteBackend(Backend):
     `-c` enables compression, and the following keyword picks the algorithm out of `zstd`, `zlib`, or `lzma`.
 
     For `zlib` and `lzma`, it compresses independently each file. This is equivalent to a non-solid (i.e., regular)
-    archive. For `zstd`, it applies a hybrid compression approach:
-    1. If a directory consists of at least 10 files with the total size of at least 2.5KB:
-        - Calculate the average file size S within the directory; cap S to the range of 512B to 16KB.
-        - Train a compression dictionary D of size S on the entire contents of the directory.
-        - Store D in a special file `.zstd-dict` within this directory in the database.
-        - Compress independently each file within the directory using D.
-        - The decompression of the file content requires reading first the dictionary. Contrary to a solid archive,
-        each file can be decompressed independently, i.e., without decompressing contents of other files in the same
-        directory, resulting in very little overhead. The loaded dictionaries are cached for fast access to several
-        files within the same directory.
-    2. Otherwise:
-        - Compress independently each file within the directory.
-    3. File and directory names, and parent-child relationships are not compressed.
+    archive. For `zstd`, it first trains a dictionary of common patterns on a (large) sample of all files and stores
+    the trained dictionary in the `config` table at key `zstd_dict`. Next, it compresses independently each file, seeding
+    the compressor with this dictionary. The decompression requires seeding the decompressor with this dictionary too.
 
     """
 
@@ -87,18 +76,20 @@ class SQLiteBackend(Backend):
             compressor = self._conn.execute("SELECT value FROM config WHERE key='compressor'").fetchone()[0]
             match compressor:
                 case "zlib":
-                    self._decompressor = lambda x, d: zlib.decompress(x)
+                    self._decompressor = lambda x: zlib.decompress(x)
                 case "lzma":
-                    self._decompressor = lambda x, d: lzma.decompress(x)
+                    self._decompressor = lambda x: lzma.decompress(x)
                 case "zstd":
-                    self._decompressor = lambda x, d: compression.zstd.decompress(x, zstd_dict=d)
+                    dict_bytes = self._conn.execute("SELECT value FROM config WHERE key='zstd_dict'").fetchone()[0]
+                    zstd_dict = ZstdDict(dict_bytes)
+                    self._decompressor = lambda x: compression.zstd.decompress(x, zstd_dict=zstd_dict)
                 case _:
-                    self._decompressor = lambda x, d: x
+                    self._decompressor = lambda x: x
 
     @override
     def sub(self, path: str) -> Backend:
         id, name = self._exists(path)
-        return SQLiteBackend(self._conn, id, self._parent_path / name)
+        return SQLiteBackend(self._conn, id, self._parent_path / name, self._decompressor)
 
     def _exists(self, name: Optional[str] = None) -> tuple[int | None, str]:
         if self._parent is None and name is None:
@@ -119,39 +110,23 @@ class SQLiteBackend(Backend):
             raise FileNotFoundError(f"Path {self._parent_path / (name if name else "")} does not exist.")
         return row[0], row[1]
 
-    @staticmethod
-    @functools.lru_cache(maxsize=2048)
-    def _get_zstd_dict(_bytes: Optional[bytes]) -> Optional[ZstdDict]:
-        if _bytes is None:
-            return None
-        return ZstdDict(_bytes)
-
     @override
     def read(self, filename: str | None = None) -> str:
         if filename is None:
             cursor = self._conn.execute(
-                """SELECT f1.content, f2.content AS zstd_dict
-                   FROM files f1
-                            LEFT JOIN files f2 ON f1.parent = f2.parent AND f2.name = '.zstd-dict'
-                   WHERE f1.id = :parent
-                   LIMIT 1""",
+                "SELECT content FROM files WHERE id = :parent LIMIT 1",
                 {"parent": self._parent}
             )
         else:
             cursor = self._conn.execute(
-                """SELECT f1.content, f2.content AS zstd_dict
-                   FROM files f1
-                            LEFT JOIN files f2 ON f1.parent = f2.parent AND f2.name = '.zstd-dict'
-                   WHERE f1.parent IS :parent
-                     AND f1.name = :name
-                   LIMIT 1""",
+                "SELECT content FROM files WHERE parent IS :parent AND name = :name LIMIT 1",
                 {"parent": self._parent, "name": filename}
             )
 
         content = cursor.fetchone()
         if content is None:
             raise FileNotFoundError(f"Path {self._parent_path / (filename if filename else "")} does not exist.")
-        return self._decompressor(content[0], SQLiteBackend._get_zstd_dict(content[1])).decode("utf-8")
+        return self._decompressor(content[0]).decode("utf-8")
 
     @override
     def glob(self, pattern: str) -> Generator[Backend, None, None]:
@@ -161,7 +136,7 @@ class SQLiteBackend(Backend):
         )
 
         for row in cursor:
-            yield SQLiteBackend(self._conn, row[0], self._parent_path / row[1])
+            yield SQLiteBackend(self._conn, row[0], self._parent_path / row[1], self._decompressor)
 
     def __del__(self):
         if self._conn is not None and sys.getrefcount(self._conn) <= 2:
@@ -178,8 +153,8 @@ class SQLiteBackend(Backend):
                       CREATE TABLE IF NOT EXISTS config
                       (
                           key   TEXT NOT NULL PRIMARY KEY,
-                          value TEXT
-                      ) STRICT
+                          value TEXT -- NOTE: no STRICT option, so BLOB is accepted
+                      ) WITHOUT ROWID
                       """)
         _conn.execute("""
                       CREATE TABLE IF NOT EXISTS files
@@ -203,7 +178,7 @@ class SQLiteBackend(Backend):
         conn.execute("PRAGMA synchronous = 0")
         conn.execute("PRAGMA foreign_keys = 1")
         conn.execute("PRAGMA journal_mode = TRUNCATE")
-        conn.execute("PRAGMA page_size = %d" % (1 << 9))
+        conn.execute("PRAGMA page_size = %d" % (1 << 16))
         conn.execute("PRAGMA temp_store = MEMORY")
         conn.autocommit = False
         return conn
@@ -235,18 +210,47 @@ class SQLiteBackend(Backend):
         return cursor.fetchone()[0]  # primary key
 
     @staticmethod
+    def _train_zstd_dict(files: list[Path], dict_size: int = 512 * 1024) -> ZstdDict:
+        only_files = [f for f in files if f.is_file() and (s := f.stat().st_size) >= 8 and s <= 16384]
+        sum_size = sum(f.stat().st_size for f in only_files)
+        modulo = max(int((sum_size / dict_size) / 128), 1)  # sample should be 100x larger than dict_size
+        sample = [f.read_bytes() for i, f in enumerate(only_files) if i % modulo == 0]
+        return compression.zstd.train_dict(sample, dict_size)
+
+    @staticmethod
+    def _get_file_list(path: Path) -> list[Path]:
+        out = []
+        for dirpath, dirnames, filenames in path.walk(top_down=True, follow_symlinks=False):
+            for dir in sorted(dirnames):  # copy dirnames, as we modify the original collection below
+                if not SQLiteBackend._valid_dirs.fullmatch(dir):
+                    logging.warning(f"Skipping {dirpath / dir}...")
+                    dirnames.remove(dir)
+                    continue
+                out.append(dirpath / dir)
+
+            files_to_process = sorted(f for f in filenames if SQLiteBackend._valid_files.fullmatch(f))
+            for file in files_to_process:
+                out.append(dirpath / file)
+        return out
+
+    @staticmethod
     def load(
             mpmmine_path: Path,
             sqlite_path: Path,
             truncate: bool = False,
             compress: Literal["zlib", "lzma", "zstd"] | None = None,
     ):
+        files = SQLiteBackend._get_file_list(mpmmine_path)
+
         if truncate:
-            logging.warning(f"Deleting {sqlite_path}...")
+            logging.warning(f"Deleting {sqlite_path} if exists...")
             sqlite_path.unlink(missing_ok=True)
 
         with SQLiteBackend._connect(sqlite_path) as conn:
             SQLiteBackend._create_schema(conn, index=False)
+
+            if compress is not None:
+                logging.info(f"Configuring compressor {compress}...")
 
             conn.execute(
                 "INSERT OR REPLACE INTO config (key, value) VALUES (:key, :value)",
@@ -259,49 +263,32 @@ class SQLiteBackend(Backend):
                 case "lzma":
                     compressor = lambda x: lzma.compress(x, check=CHECK_NONE)
                 case "zstd":
-                    compressor = lambda x: compression.zstd.compress(x, level=8)
+                    zstd_dict = SQLiteBackend._train_zstd_dict(files)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO config (key, value) VALUES (:key, :value)",
+                        {"key": "zstd_dict", "value": zstd_dict.dict_content}
+                    )
+                    compressor = lambda x: compression.zstd.compress(x, level=22, zstd_dict=zstd_dict)
                 case _:
                     compressor = lambda x: x
 
+            logging.info("Adding files...")
             parents: dict[str, int] = {}  # key: dir name, value: int primary key
+            for path in files:
+                logging.debug(f"Adding {path}...")
 
-            for dirpath, dirnames, filenames in mpmmine_path.walk(top_down=True, follow_symlinks=False):
-                logging.info(f"Processing {dirpath}...")
-                parent_id = parents.get(str(dirpath), None)
-                for dir in sorted(dirnames):  # copy dirnames, as we modify the original collection below
-                    if not SQLiteBackend._valid_dirs.fullmatch(dir):
-                        logging.warning(f"Skipping {dirpath / dir}...")
-                        dirnames.remove(dir)
-                        continue
-                    path = dirpath / dir
+                parent_id = parents.get(str(path.parent), None)
+                if path.is_dir():
                     parents[str(path)] = SQLiteBackend._add_file(conn, path, parent_id, compressor)
+                elif path.is_file():
+                    SQLiteBackend._add_file(conn, path, parent_id, compressor)
 
-                files_to_process = sorted(f for f in filenames if SQLiteBackend._valid_files.fullmatch(f))
-                zstd_dict = None
-                actual_compressor = compressor
-                if compress == "zstd":
-                    train_data = [(dirpath / file).read_bytes() for file in files_to_process]
-                    train_size = sum(len(d) for d in train_data)
-                    if len(train_data) >= 10 and train_size >= 5 * 512:
-                        # the average file size bound to the range of 512B..16KB
-                        dict_size = min(max(train_size // len(train_data), 512), 16384)
-                        zstd_dict = compression.zstd.train_dict(train_data, dict_size)
-                        SQLiteBackend._add_file(
-                            conn,
-                            dirpath / ".zstd-dict",
-                            parent_id,
-                            lambda x: x,
-                            override_content=zstd_dict.dict_content
-                        )
-                        actual_compressor = lambda x: compression.zstd.compress(x, level=14, zstd_dict=zstd_dict)
-
-                for file in files_to_process:
-                    path = dirpath / file
-                    SQLiteBackend._add_file(conn, path, parent_id, actual_compressor)
-
+            logging.info("Indexing...")
             SQLiteBackend._create_schema(conn, index=True)
-            conn.execute("PRAGMA optimize")
+            conn.execute("ANALYZE")
             conn.commit()
+
+            logging.info("Done.")
 
 
 def _configure_logging():

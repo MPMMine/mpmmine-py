@@ -14,27 +14,13 @@ SQLITE_LZMA_PATH = BASE_PATH / "MPMMine-lzma.sqlite"
 SQLITE_LZMA_NOCHECK_PATH = BASE_PATH / "MPMMine-lzma-nocheck.sqlite"
 SQLITE_LZMA_NOCHECK_0e_PATH = BASE_PATH / "MPMMine-lzma-nocheck-0e.sqlite"
 SQLITE_LZMA_NOCHECK_1e_PATH = BASE_PATH / "MPMMine-lzma-nocheck-1e.sqlite"
-SQLITE_ZSTD_PATH = BASE_PATH / "MPMMine-zstd.sqlite"
-SQLITE_ZSTD8_DICT1024_PATH = BASE_PATH / "MPMMine-zstd8-dict1024.sqlite"
-SQLITE_ZSTD8_DICT2048_PATH = BASE_PATH / "MPMMine-zstd8-dict2048.sqlite"
-SQLITE_ZSTD10_DICT1024_PATH = BASE_PATH / "MPMMine-zstd10-dict1024.sqlite"
-SQLITE_ZSTD10_DICT2048_PATH = BASE_PATH / "MPMMine-zstd10-dict2048.sqlite"
-SQLITE_ZSTD12_DICT4096_PATH = BASE_PATH / "MPMMine-zstd12-dict4096.sqlite"
-SQLITE_ZSTD14_DICT8192_PATH = BASE_PATH / "MPMMine-zstd14-dict8192.sqlite"
-SQLITE_ZSTD14_DICTAVG_PATH = BASE_PATH / "MPMMine-zstd14-dictavg.sqlite"
+SQLITE_ZSTD_PATH = BASE_PATH / "MPMMine-zstd-v0.1.0.20260722-beta-level9-topleveldict.sqlite"
 
 
 @pytest.fixture(params=(paths := [
     BASE_PATH,
     SQLITE_PLAIN_PATH,
     SQLITE_ZSTD_PATH,
-    SQLITE_ZSTD8_DICT1024_PATH,
-    SQLITE_ZSTD8_DICT2048_PATH,
-    SQLITE_ZSTD10_DICT1024_PATH,
-    SQLITE_ZSTD10_DICT2048_PATH,
-    SQLITE_ZSTD12_DICT4096_PATH,
-    SQLITE_ZSTD14_DICT8192_PATH,
-    SQLITE_ZSTD14_DICTAVG_PATH,
 ]), ids=[str(p) for p in paths], scope="package")
 def mpmmine(request):
     """

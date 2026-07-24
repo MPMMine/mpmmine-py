@@ -125,41 +125,31 @@ where `-t` stands for truncate (overwrite) of an existing database; without `-t`
 `-c` enables compression, and the following keyword picks the algorithm out of `zstd`, `zlib`, or `lzma`.
 
 For `zlib` and `lzma`, it compresses independently each file. This is equivalent to a non-solid (i.e., regular)
-archive. For `zstd`, it applies a hybrid compression approach:
-
-1. If a directory consists of at least 10 files with the total size of at least 2.5KB:
-   - Calculate the average file size S within the directory; cap S to the range of 512B to 16KB.
-   - Train a compression dictionary D of size S on the entire contents of the directory.
-   - Store D in a special file `.zstd-dict` within this directory in the database.
-   - Compress independently each file within the directory using D.
-   - The decompression of the file content requires reading first the dictionary. Contrary to a solid archive,
-     each file can be decompressed independently, i.e., without decompressing contents of other files in the same
-     directory, resulting in very little overhead. The loaded dictionaries are cached for fast access to several
-     files within the same directory.
-2. Otherwise:
-   - Compress independently each file within the directory.
-3. File and directory names, and parent-child relationships are not compressed.
+archive. For `zstd`, it first trains a dictionary of common patterns on a (large) sample of all files and stores
+the trained dictionary in the `config` table at key `zstd_dict`. Next, it compresses independently each file, seeding
+the compressor with this dictionary. The decompression requires seeding the decompressor with this dictionary too.
 
 The database schema is as follows:
 
 ```sqlite
 CREATE TABLE IF NOT EXISTS config
 (
-   key   TEXT NOT NULL PRIMARY KEY,
-   value TEXT
-) STRICT;
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT -- NOTE: no STRICT option, so BLOB is accepted
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS files
 (
-   id      INTEGER PRIMARY KEY AUTOINCREMENT,
-   parent  INTEGER REFERENCES files (id) ON DELETE CASCADE ON UPDATE CASCADE,
-   name    TEXT NOT NULL,
-   content BLOB
-) STRICT;
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent  INTEGER REFERENCES files (id) ON DELETE CASCADE ON UPDATE CASCADE,
+    name    TEXT NOT NULL,
+    content BLOB
+) STRICT
 CREATE UNIQUE INDEX IF NOT EXISTS files_parent_name ON files (parent, name);
 ```
 
-Where `config` table stores records necessary to configure the backend. Currently, it holds only a single key
-`compressor` that attains a value out of `zstd`, `zlib`, `lzma`, or `NULL` depending on the compression used.
+Where `config` table stores records necessary to configure the backend. Currently, it holds key`compressor` that attains
+a value out of `zstd`, `zlib`, `lzma`, or `NULL` depending on the compression used, and key `zstd_dict` containing the
+dictionary used for compression using `zstd`.
 Table `files` consists of all files and directories within the MPMMine dataset. Column `id` is a unique primary key of
 the database record; Column `parent` holds the reference to the parent directory, if any; Column `name` is the file
 name; Column `content` holds file contents; it is `NULL` for directories. The `files_parent_name` index facilitates
