@@ -203,7 +203,7 @@ class SQLiteBackend(Backend):
         conn.execute("PRAGMA synchronous = 0")
         conn.execute("PRAGMA foreign_keys = 1")
         conn.execute("PRAGMA journal_mode = TRUNCATE")
-        # conn.execute("PRAGMA page_size = %d" % (1 << 14))
+        conn.execute("PRAGMA page_size = %d" % (1 << 9))
         conn.execute("PRAGMA temp_store = MEMORY")
         conn.autocommit = False
         return conn
