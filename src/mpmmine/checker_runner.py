@@ -4,6 +4,7 @@ import json
 import subprocess
 import re
 import argparse
+import textwrap
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -100,11 +101,69 @@ def process_directory(LOG_DIR, checker_path, instance_path, folder_path, solver,
     return "SUCCESS" if all_passed else "FAILED", label
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("root", type=Path, help="Path to 'problems' directory")
-    parser.add_argument("--solver", default="gecode")
-    parser.add_argument("--workers", type=int, default=os.cpu_count())
-    parser.add_argument("--with_objective", action='store_true')
+    parser = argparse.ArgumentParser(
+        prog="mpmmine-checker-runner",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent("""
+            Automated MPMMINE Model Conformance & Solution Validation Script
+            ================================================================
+            Evaluates candidate MiniZinc solutions against specified checker 
+            models (`checker.mzn`) across structured problem directories of 
+            the MPMMine benchmark dataset.
+
+            The tool recursively discovers models and instances under the target
+            root directory, running MiniZinc against both valid ("solutions") 
+            and invalid ("non solutions") folders to ensure exact 
+            constraint enforcement and objective value verification.
+
+            Examples:
+              # Run full validation using all available CPU cores
+              python checker_runner.py ./problems
+
+              # Run using 4 processes with the Gurobi solver
+              python checker_runner.py ./problems --solver gurobi --workers 4
+
+              # Include objective value parsing and verification
+              python checker_runner.py ./problems --with_objective
+
+            Directory Structure Expected:
+              MPMMINE/
+                └── problems/
+                    ├── manifest.json
+                    └── models/
+                        └── <model_id>/
+                            ├── checker.mzn
+                            └── instances/
+                                └── <instance_id>/
+                                    ├── instance.dzn
+                                    ├── solutions/*.dzn
+                                    └── non solutions/*.dzn
+        """)
+    )
+
+    parser.add_argument(
+        "root",
+        type=Path,
+        help="Path to the root 'problems' directory containing MPMMine benchmark dataset."
+    )
+    parser.add_argument(
+        "--solver",
+        default="gecode",
+        metavar="SOLVER",
+        help="MiniZinc solver backend to use for running checkers (default: 'gecode')."
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=os.cpu_count(),
+        metavar="N",
+        help="Number of concurrent worker processes for checking files (default: system CPU count)."
+    )
+    parser.add_argument(
+        "--with_objective",
+        action='store_true',
+        help="Enable objective function validation for solution files and output logs to 'checker_logs_with_objective'."
+    )
     args = parser.parse_args()
 
     LOG_DIR = Path("checker_logs") if not args.with_objective else Path("checker_logs_with_objective")
