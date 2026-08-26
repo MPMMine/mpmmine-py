@@ -109,7 +109,7 @@ class MPMMine:
         :return: The list of problems.
         """
         out = [
-            self.get_problem_(path.name.rsplit()[0], path)
+            self._get_problem(path.name.rsplit()[0], path)
             for path in self._backend.sub("problems").glob("P*")
         ]
         out.sort(key=lambda p: p.id)
@@ -123,20 +123,20 @@ class MPMMine:
         :raises ValueError: if id is invalid
         :raises FileNotFoundError: if id does not exist
         """
-        return self.get_problem_(id)
+        return self._get_problem(id)
 
-    def get_problem_(self, id: str, path_: Backend | None = None) -> Problem:
+    def _get_problem(self, id: str, _path: Backend | None = None) -> Problem:
         if MPMMine._problem_id_regex.fullmatch(id) is None:
             raise ValueError(f"Id {id} is invalid")
 
         try:
-            if path_ is not None:
-                path = path_
+            if _path is not None:
+                path = _path
             else:
                 path = next(self._backend.sub("problems").glob(f"{id}*"))
 
             raw = json.loads(path.read("manifest.json"))
-            return Problem(**raw, full_id=f"MPMMine-{raw['id']}", backend_=path)
+            return Problem(**raw, full_id=f"MPMMine-{raw['id']}", _backend=path)
         except (OSError, StopIteration) as err:
             raise FileNotFoundError(f"Problem {id} does not exist") from err
 
@@ -151,7 +151,7 @@ class Problem:
     references: list[dict[str, str]]
     links: dict[str, str]
     full_id: str
-    backend_: Backend
+    _backend: Backend
 
     @cached_property
     def models(self) -> list[Model]:
@@ -164,9 +164,9 @@ class Problem:
             Model(
                 id=(id_ := path.name.split()[0]),
                 full_id=f"{self.full_id}{id_}",
-                backend_=path,
+                _backend=path,
                 problem=self
-            ) for path in self.backend_.sub("models").glob("M*")
+            ) for path in self._backend.sub("models").glob("M*")
         ]
         out.sort(key=lambda m: m.id)
         return out
@@ -185,7 +185,7 @@ class Problem:
             return Model(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("models").glob(f"{id}*")),
+                _backend=next(self._backend.sub("models").glob(f"{id}*")),
                 problem=self
             )
         except StopIteration:
@@ -196,7 +196,7 @@ class Problem:
 class Model:
     id: str
     full_id: str
-    backend_: Backend
+    _backend: Backend
     problem: Problem
 
     @cached_property
@@ -205,7 +205,7 @@ class Model:
         The MiniZinc code for this model.
         This property is lazy-initialized.
         """
-        return self.backend_.read("model.mzn")
+        return self._backend.read("model.mzn")
 
     @cached_property
     def instances(self) -> list[Instance]:
@@ -218,9 +218,9 @@ class Model:
             Instance(
                 id=(id_ := path.name.split()[0]),
                 full_id=f"{self.full_id}{id_}",
-                backend_=path,
+                _backend=path,
                 model=self
-            ) for path in self.backend_.sub("instances").glob(f"I*")
+            ) for path in self._backend.sub("instances").glob(f"I*")
         ]
         out.sort(key=lambda i: i.id)
         return out
@@ -240,7 +240,7 @@ class Model:
             return Instance(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("instances").glob(f"{id}*")),
+                _backend=next(self._backend.sub("instances").glob(f"{id}*")),
                 model=self
             )
         except StopIteration:
@@ -257,9 +257,9 @@ class Model:
             Description(
                 id=(id_ := path.name.split()[0]),
                 full_id=f"{self.full_id}{id_}",
-                backend_=path,
+                _backend=path,
                 model=self
-            ) for path in self.backend_.sub("descriptions").glob(f"D*")
+            ) for path in self._backend.sub("descriptions").glob(f"D*")
         ]
         out.sort(key=lambda d: d.id)
         return out
@@ -279,7 +279,7 @@ class Model:
             return Description(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("descriptions").glob(f"{id}*")),
+                _backend=next(self._backend.sub("descriptions").glob(f"{id}*")),
                 model=self
             )
         except StopIteration:
@@ -290,7 +290,7 @@ class Model:
 class Instance:
     id: str
     full_id: str
-    backend_: Backend
+    _backend: Backend
     model: Model
 
     @cached_property
@@ -299,7 +299,7 @@ class Instance:
         The instance DZN file contents.
         This property is lazy-initialized.
         """
-        return self.backend_.read("instance.dzn")
+        return self._backend.read("instance.dzn")
 
     @property
     def solutions(self) -> list[Solution]:
@@ -314,10 +314,10 @@ class Instance:
                 Solution(
                     id=(id_ := path.name.split()[0]),
                     full_id=f"{self.full_id}{id_}",
-                    backend_=path,
+                    _backend=path,
                     cls=True,
                     instance=self
-                ) for path in self.backend_.sub("solutions").glob(f"S*")
+                ) for path in self._backend.sub("solutions").glob(f"S*")
             ]
             out.sort(key=lambda s: s.id)
             return out
@@ -339,7 +339,7 @@ class Instance:
             return Solution(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("solutions").glob(f"{id}*")),
+                _backend=next(self._backend.sub("solutions").glob(f"{id}*")),
                 cls=True,
                 instance=self
             )
@@ -358,10 +358,10 @@ class Instance:
                 Solution(
                     id=(id_ := path.name.split()[0]),
                     full_id=f"{self.full_id}{id_}",
-                    backend_=path,
+                    _backend=path,
                     cls=False,
                     instance=self
-                ) for path in self.backend_.sub("non solutions").glob(f"N*")
+                ) for path in self._backend.sub("non solutions").glob(f"N*")
             ]
             out.sort(key=lambda s: s.id)
             return out
@@ -383,7 +383,7 @@ class Instance:
             return Solution(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("non solutions").glob(f"{id}*")),
+                _backend=next(self._backend.sub("non solutions").glob(f"{id}*")),
                 cls=False,
                 instance=self
             )
@@ -401,10 +401,10 @@ class Instance:
             Description(
                 id=(id_ := path.name.split()[0]),
                 full_id=f"{self.full_id}{id_}",
-                backend_=path,
+                _backend=path,
                 model=self.model,
                 instance=self
-            ) for path in self.backend_.sub("descriptions").glob(f"D*")
+            ) for path in self._backend.sub("descriptions").glob(f"D*")
         ]
         out.sort(key=lambda d: d.id)
         return out
@@ -424,7 +424,7 @@ class Instance:
             return Description(
                 id=id,
                 full_id=f"{self.full_id}{id}",
-                backend_=next(self.backend_.sub("descriptions").glob(f"{id}*")),
+                _backend=next(self._backend.sub("descriptions").glob(f"{id}*")),
                 model=self.model,
                 instance=self
             )
@@ -436,7 +436,7 @@ class Instance:
 class Description:
     id: str
     full_id: str
-    backend_: Backend
+    _backend: Backend
     model: Optional[Model] = None
     instance: Optional[Instance] = None
 
@@ -446,14 +446,14 @@ class Description:
         The description Markdown contents.
         This property is lazy-initialized.
         """
-        return self.backend_.read()
+        return self._backend.read()
 
 
 @dataclass(frozen=True)
 class Solution:
     id: str
     full_id: str
-    backend_: Backend
+    _backend: Backend
     cls: bool
     instance: Instance
 
@@ -464,4 +464,4 @@ class Solution:
         Caution! Repetitive access to this property may be slow, as it reads the underlying file on each access.
         External caching is recommended for repetitive access.
         """
-        return self.backend_.read()
+        return self._backend.read()
