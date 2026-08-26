@@ -1,8 +1,10 @@
 import json
 import logging
 import re
+import tomllib
 from dataclasses import dataclass
 from functools import cached_property
+from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +65,32 @@ class MPMMine:
             logging.error("Cannot load file backend.", exc_info=e)
 
         raise ValueError(f"Cannot detect backend for path {path}")
+
+    @cached_property
+    def dataset_version(self) -> str:
+        """
+        MPMMine dataset version.
+        :return: string in the format of N.N.N.YYYYMMDD, where all uppercase letters are integers; N stands for an
+        arbitrary version number, Y for year, M for month, D for day.
+        """
+        return self._backend.read("VERSION").strip("\t\n\v\f\r ")
+
+    @cached_property
+    def library_version(self) -> str:
+        """
+        mpmmine library version.
+        :return: string in the format of N.N.N.YYYYMMDD, where all uppercase letters are integers; N stands for an
+        arbitrary version number, Y for year, M for month, D for day.
+        """
+        try:
+            # try with the installed package
+            return version("mpmmine")
+        except PackageNotFoundError:
+            # otherwise, we run from sources, so read the pyproject.toml file:
+            with open(Path(__file__).parent.parent.parent / "pyproject.toml", "rb") as f:
+                data = tomllib.load(f)
+            # PEP 621
+            return data["project"]["version"]
 
     def __getitem__(self, id: str) -> Problem | Model | Instance | Description | Solution:
         """

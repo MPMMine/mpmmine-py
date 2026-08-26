@@ -170,7 +170,7 @@ class SQLiteBackend(Backend):
 
     _valid_dirs = re.compile(
         r"^(?:problems|P\d{3}.*|models|M\d{3}.*|instances|I\d{3}.*|descriptions|solutions|non solutions|docs)$")
-    _valid_files = re.compile(r"^(?:[^.]+\.(?:dzn|mzn|(?:\w{1,3}\.)?md|json)|LICENSE|ACKNOWLEDGMENTS.md)$")
+    _valid_files = re.compile(r"^(?:[^.]+\.(?:dzn|mzn|(?:\w{1,3}\.)?md|json)|LICENSE|VERSION|ACKNOWLEDGMENTS.md)$")
 
     @staticmethod
     def _connect(file: Path) -> sqlite3.Connection:

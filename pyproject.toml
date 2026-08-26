@@ -1,6 +1,6 @@
 [project]
 name = "mpmmine"
-version = "0.1.2.20260724"
+version = "0.2.0.20260826"
 authors = [
     { name = "Tomasz P. Pawlak", email = "tpawlak@cs.put.poznan.pl" },
     { name = "Rafał Stachowiak", email = "rstachowiak@cs.put.poznan.pl" }

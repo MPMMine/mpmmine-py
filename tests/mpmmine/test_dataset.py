@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from mpmmine.dataset import MPMMine, Problem, Description, Instance, Solution
@@ -7,6 +9,17 @@ from mpmmine.dataset import MPMMine, Problem, Description, Instance, Solution
 
 def test_init_mpmmine(mpmmine: MPMMine):
     assert mpmmine is not None
+
+
+def test_dataset_version(mpmmine: MPMMine):
+    pattern = re.compile(r"\d+.\d+.\d+.20\d\d[0-1]\d[0-3]\d")
+    assert pattern.fullmatch(mpmmine.dataset_version)
+
+
+def test_library_version(mpmmine: MPMMine):
+    pattern = re.compile(r"\d+.\d+.\d+.20\d\d[0-1]\d[0-3]\d")
+    print(mpmmine.library_version)
+    assert pattern.fullmatch(mpmmine.library_version)
 
 # Problem layer tests
 
