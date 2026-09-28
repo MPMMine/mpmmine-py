@@ -24,7 +24,7 @@ SQLITE_ZSTD_PATH = BASE_PATH / "MPMMine-zstd-v0.1.0.20260722-beta-level9-topleve
 ]), ids=[str(p) for p in paths], scope="package")
 def mpmmine(request):
     """
-    Fixture that initializes MPMMine with either FileBackend or ArchiveBackend.
+    Fixture that initializes MPMMine with different backends.
     """
 
     return MPMMine(request.param)
