@@ -345,7 +345,7 @@ class Instance:
                     _backend=path,
                     cls=True,
                     instance=self
-                ) for path in self._backend.sub("solutions").glob(f"S*")
+                ) for path in self._backend.sub("solutions").glob(f"S*.dzn")
             ]
             out.sort(key=lambda s: s.id)
             return out
@@ -389,7 +389,7 @@ class Instance:
                     _backend=path,
                     cls=False,
                     instance=self
-                ) for path in self._backend.sub("non solutions").glob(f"N*")
+                ) for path in self._backend.sub("non solutions").glob(f"N*.dzn")
             ]
             out.sort(key=lambda s: s.id)
             return out
@@ -432,7 +432,7 @@ class Instance:
                 _backend=path,
                 model=self.model,
                 instance=self
-            ) for path in self._backend.sub("descriptions").glob(f"D*")
+            ) for path in self._backend.sub("descriptions").glob(f"D*.md")
         ]
         out.sort(key=lambda d: d.id)
         return out
